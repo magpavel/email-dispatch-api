@@ -29,7 +29,7 @@ abstract class ApiTestCase extends WebTestCase
             return;
         }
 
-        $app = new Application(static::$kernel);
+        $app = new Application(static::$kernel ?? static::bootKernel());
         $app->setAutoExit(false);
         $app->run(
             new ArrayInput(['command' => 'doctrine:migrations:migrate', '--no-interaction' => true]),
