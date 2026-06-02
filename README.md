@@ -1,6 +1,25 @@
-# email-dispatch-api
+# Email Dispatch API
 
-A production-style Symfony 7 backend API for asynchronous email dispatch. Built as a portfolio demonstration of backend architecture, queue processing, provider abstraction, observability, and testing practices.
+![CI](https://github.com/magpavel/email-dispatch-api/actions/workflows/ci.yml/badge.svg)
+![PHP](https://img.shields.io/badge/PHP-8.3%2B-blue)
+![Symfony](https://img.shields.io/badge/Symfony-7-black)
+
+A Symfony backend service for asynchronous email delivery with provider abstraction, queue processing, retries, webhooks, and delivery status tracking.
+
+## Why this project exists
+
+This project was built as a portfolio backend system to demonstrate asynchronous processing, provider abstraction, API design, testing, and production-oriented Symfony architecture.
+
+## Implemented features
+
+- [x] REST API for email submission
+- [x] Async processing with Symfony Messenger
+- [x] Provider abstraction and failover
+- [x] Status tracking
+- [x] Webhook endpoint
+- [x] Unit and integration tests
+- [x] Docker Compose local environment
+- [x] GitHub Actions CI
 
 ## What it does
 
@@ -83,27 +102,102 @@ Set `DEFAULT_EMAIL_PROVIDER` in your env to choose the default. Callers can also
 
 **Requirements:** Docker, Docker Compose, PHP 8.3, Composer.
 
-```bash
-git clone https://github.com/yourname/email-dispatch-api.git
-cd email-dispatch-api
+### 1. Clone and install dependencies
 
-cp .env.example .env.local   # edit as needed
+```bash
+git clone https://github.com/magpavel/email-dispatch-api.git
+cd email-dispatch-api
+composer install
+```
+
+### 2. Start all services
+
+```bash
 docker compose up -d
 ```
 
-Inside Docker the app runs on http://localhost:8000.  
-RabbitMQ management UI: http://localhost:15673  
-Mailhog UI: http://localhost:8026
-
-### First run (database setup)
+This starts PostgreSQL (port 5433), RabbitMQ (port 5673), Mailhog (port 1026), the app (port 8000), and the async worker. Wait ~10 seconds for services to become healthy:
 
 ```bash
-# On your host (using the exposed port 5433):
-php bin/console doctrine:schema:create
-
-# Or exec into the app container:
-docker compose exec app php bin/console doctrine:schema:create
+docker compose ps   # all should show "running" or "healthy"
 ```
+
+| Service | URL |
+|---|---|
+| API | http://localhost:8000 |
+| RabbitMQ management | http://localhost:15673 (guest/guest) |
+| Mailpit (caught emails) | http://localhost:8026 |
+
+### 3. Run database migrations
+
+```bash
+php bin/console doctrine:migrations:migrate --no-interaction
+```
+
+### 4. Verify the full flow
+
+**Submit an email:**
+
+```bash
+curl -s -X POST http://localhost:8000/api/emails \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: test-001" \
+  -d '{
+    "recipient_email": "test@example.com",
+    "subject": "Hello",
+    "html_body": "<p>Hello world</p>"
+  }'
+```
+
+Copy the `id` from the response. Status will be `queued`.
+
+**Poll until sent (a few seconds):**
+
+```bash
+curl -s http://localhost:8000/api/emails/{id}
+```
+
+Status should change to `sent`, provider to `log`. Check worker logs to see the structured log entry:
+
+```bash
+docker compose logs worker
+```
+
+**Test idempotency** — send the same request again with the same `Idempotency-Key: test-001`. You should get back the identical `id`.
+
+**Test a webhook delivery event** — use the `provider_message_id` from the status response:
+
+```bash
+curl -s -X POST http://localhost:8000/api/webhooks/mailgun \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event-data": {
+      "event": "delivered",
+      "message": {"headers": {"message-id": "PROVIDER_MESSAGE_ID_HERE"}}
+    }
+  }'
+```
+
+Poll status again — it should now show `delivered`.
+
+**Test validation:**
+
+```bash
+curl -s -X POST http://localhost:8000/api/emails \
+  -H "Content-Type: application/json" \
+  -d '{"subject": "missing fields"}'
+```
+
+Expect 422 with field-level error messages.
+
+### 5. Run the test suite
+
+```bash
+php bin/console doctrine:database:create --env=test --if-not-exists
+php bin/phpunit --testdox
+```
+
+Integration tests automatically create and truncate the schema — no manual setup needed beyond the database existing.
 
 ---
 

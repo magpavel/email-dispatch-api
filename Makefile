@@ -39,9 +39,9 @@ worker: ## Tail worker logs
 migrate: ## Run pending migrations
 	$(CONSOLE) doctrine:migrations:migrate --no-interaction
 
-migrate-fresh: ## Drop schema and re-create from scratch
-	$(CONSOLE) doctrine:schema:drop --force
-	$(CONSOLE) doctrine:schema:create
+migrate-fresh: ## Drop schema and re-run all migrations from scratch
+	$(CONSOLE) doctrine:schema:drop --force --full-database
+	$(CONSOLE) doctrine:migrations:migrate --no-interaction
 
 db-diff: ## Generate a migration from current entity state
 	$(CONSOLE) doctrine:migrations:diff

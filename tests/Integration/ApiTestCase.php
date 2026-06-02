@@ -5,35 +5,38 @@ declare(strict_types=1);
 namespace App\Tests\Integration;
 
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Tools\SchemaTool;
+use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\NullOutput;
 
 abstract class ApiTestCase extends WebTestCase
 {
     protected KernelBrowser $client;
-    private static bool $schemaCreated = false;
+    private static bool $migrated = false;
 
     protected function setUp(): void
     {
         $this->client = static::createClient();
-        $this->ensureSchema();
+        $this->ensureMigrated();
         $this->truncateTables();
     }
 
-    private function ensureSchema(): void
+    private function ensureMigrated(): void
     {
-        if (self::$schemaCreated) {
+        if (self::$migrated) {
             return;
         }
 
-        /** @var EntityManagerInterface $em */
-        $em = static::getContainer()->get(EntityManagerInterface::class);
-        $tool = new SchemaTool($em);
-        $classes = $em->getMetadataFactory()->getAllMetadata();
-        $tool->dropSchema($classes);
-        $tool->createSchema($classes);
-        self::$schemaCreated = true;
+        $app = new Application(static::$kernel);
+        $app->setAutoExit(false);
+        $app->run(
+            new ArrayInput(['command' => 'doctrine:migrations:migrate', '--no-interaction' => true]),
+            new NullOutput(),
+        );
+
+        self::$migrated = true;
     }
 
     private function truncateTables(): void

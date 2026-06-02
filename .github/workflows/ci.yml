@@ -64,7 +64,7 @@ jobs:
           MAILGUN_WEBHOOK_SECRET: "test-webhook-secret"
         run: php bin/console cache:warmup --env=test
 
-      - name: Create test database schema
+      - name: Create test database and run migrations
         env:
           APP_ENV: test
           DATABASE_URL: "postgresql://app:secret@127.0.0.1:5432/email_dispatch_test?serverVersion=16&charset=utf8"
@@ -78,7 +78,7 @@ jobs:
           MAILGUN_WEBHOOK_SECRET: "test-webhook-secret"
         run: |
           php bin/console doctrine:database:create --env=test --if-not-exists
-          php bin/console doctrine:schema:create --env=test
+          php bin/console doctrine:migrations:migrate --env=test --no-interaction
 
       - name: Run tests
         env:

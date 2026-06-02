@@ -9,7 +9,7 @@ services:
       APP_ENV: dev
       DATABASE_URL: "postgresql://app:secret@postgres:5432/email_dispatch?serverVersion=16&charset=utf8"
       MESSENGER_TRANSPORT_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/messages"
-      MAILER_DSN: "smtp://mailhog:1025"
+      MAILER_DSN: "smtp://mailpit:1025"
       DEFAULT_EMAIL_PROVIDER: log
       MAILGUN_API_KEY: ""
       MAILGUN_DOMAIN: sandbox.mailgun.org
@@ -35,7 +35,7 @@ services:
       APP_ENV: dev
       DATABASE_URL: "postgresql://app:secret@postgres:5432/email_dispatch?serverVersion=16&charset=utf8"
       MESSENGER_TRANSPORT_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/messages"
-      MAILER_DSN: "smtp://mailhog:1025"
+      MAILER_DSN: "smtp://mailpit:1025"
       DEFAULT_EMAIL_PROVIDER: log
       MAILGUN_API_KEY: ""
       MAILGUN_DOMAIN: sandbox.mailgun.org
@@ -81,8 +81,8 @@ services:
       timeout: 5s
       retries: 10
 
-  mailhog:
-    image: mailhog/mailhog:latest
+  mailpit:
+    image: axllent/mailpit:latest
     ports:
       - "1026:1025"
       - "8026:8025"
