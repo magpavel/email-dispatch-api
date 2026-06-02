@@ -1,0 +1,92 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    volumes:
+      - .:/var/www/html:cached
+    environment:
+      APP_ENV: dev
+      DATABASE_URL: "postgresql://app:secret@postgres:5432/email_dispatch?serverVersion=16&charset=utf8"
+      MESSENGER_TRANSPORT_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/messages"
+      MAILER_DSN: "smtp://mailhog:1025"
+      DEFAULT_EMAIL_PROVIDER: log
+      MAILGUN_API_KEY: ""
+      MAILGUN_DOMAIN: sandbox.mailgun.org
+      MAILGUN_BASE_URL: https://api.mailgun.net
+      MAILGUN_FAKE_MODE: "true"
+      MAILGUN_WEBHOOK_SECRET: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    command: ["php", "bin/console", "messenger:consume", "async", "--time-limit=3600", "--memory-limit=128M", "-vv"]
+    volumes:
+      - .:/var/www/html:cached
+    environment:
+      APP_ENV: dev
+      DATABASE_URL: "postgresql://app:secret@postgres:5432/email_dispatch?serverVersion=16&charset=utf8"
+      MESSENGER_TRANSPORT_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/messages"
+      MAILER_DSN: "smtp://mailhog:1025"
+      DEFAULT_EMAIL_PROVIDER: log
+      MAILGUN_API_KEY: ""
+      MAILGUN_DOMAIN: sandbox.mailgun.org
+      MAILGUN_BASE_URL: https://api.mailgun.net
+      MAILGUN_FAKE_MODE: "true"
+      MAILGUN_WEBHOOK_SECRET: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: email_dispatch
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d email_dispatch"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1026:1025"
+      - "8026:8025"
+
+volumes:
+  postgres_data:
+  rabbitmq_data:

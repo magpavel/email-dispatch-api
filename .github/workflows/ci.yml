@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: PHP ${{ matrix.php }} — Tests, PHPStan, CS
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: email_dispatch_test
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    strategy:
+      matrix:
+        php: ['8.3']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_pgsql, zip, intl
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ matrix.php }}-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Warm up test cache
+        env:
+          APP_ENV: test
+          DATABASE_URL: "postgresql://app:secret@127.0.0.1:5432/email_dispatch_test?serverVersion=16&charset=utf8"
+          MESSENGER_TRANSPORT_DSN: "in-memory://"
+          MAILER_DSN: "null://null"
+          DEFAULT_EMAIL_PROVIDER: log
+          MAILGUN_API_KEY: "test"
+          MAILGUN_DOMAIN: "sandbox.mailgun.org"
+          MAILGUN_BASE_URL: "https://api.mailgun.net"
+          MAILGUN_FAKE_MODE: "true"
+          MAILGUN_WEBHOOK_SECRET: "test-webhook-secret"
+        run: php bin/console cache:warmup --env=test
+
+      - name: Create test database schema
+        env:
+          APP_ENV: test
+          DATABASE_URL: "postgresql://app:secret@127.0.0.1:5432/email_dispatch_test?serverVersion=16&charset=utf8"
+          MESSENGER_TRANSPORT_DSN: "in-memory://"
+          MAILER_DSN: "null://null"
+          DEFAULT_EMAIL_PROVIDER: log
+          MAILGUN_API_KEY: "test"
+          MAILGUN_DOMAIN: "sandbox.mailgun.org"
+          MAILGUN_BASE_URL: "https://api.mailgun.net"
+          MAILGUN_FAKE_MODE: "true"
+          MAILGUN_WEBHOOK_SECRET: "test-webhook-secret"
+        run: |
+          php bin/console doctrine:database:create --env=test --if-not-exists
+          php bin/console doctrine:schema:create --env=test
+
+      - name: Run tests
+        env:
+          APP_ENV: test
+          DATABASE_URL: "postgresql://app:secret@127.0.0.1:5432/email_dispatch_test?serverVersion=16&charset=utf8"
+          MESSENGER_TRANSPORT_DSN: "in-memory://"
+          MAILER_DSN: "null://null"
+          DEFAULT_EMAIL_PROVIDER: log
+          MAILGUN_API_KEY: "test"
+          MAILGUN_DOMAIN: "sandbox.mailgun.org"
+          MAILGUN_BASE_URL: "https://api.mailgun.net"
+          MAILGUN_FAKE_MODE: "true"
+          MAILGUN_WEBHOOK_SECRET: "test-webhook-secret"
+        run: php bin/phpunit --testdox
+
+      - name: Warm up dev cache (for PHPStan)
+        env:
+          APP_ENV: dev
+          DATABASE_URL: "postgresql://app:secret@127.0.0.1:5432/email_dispatch_test?serverVersion=16&charset=utf8"
+          MESSENGER_TRANSPORT_DSN: "in-memory://"
+          MAILER_DSN: "null://null"
+          DEFAULT_EMAIL_PROVIDER: log
+          MAILGUN_API_KEY: "test"
+          MAILGUN_DOMAIN: "sandbox.mailgun.org"
+          MAILGUN_BASE_URL: "https://api.mailgun.net"
+          MAILGUN_FAKE_MODE: "true"
+          MAILGUN_WEBHOOK_SECRET: "test-webhook-secret"
+        run: php bin/console cache:warmup --env=dev
+
+      - name: Run PHPStan
+        env:
+          DATABASE_URL: "postgresql://app:secret@127.0.0.1:5432/email_dispatch_test?serverVersion=16&charset=utf8"
+          DEFAULT_EMAIL_PROVIDER: log
+          MAILGUN_API_KEY: "test"
+          MAILGUN_DOMAIN: "sandbox.mailgun.org"
+          MAILGUN_BASE_URL: "https://api.mailgun.net"
+          MAILGUN_FAKE_MODE: "true"
+          MAILGUN_WEBHOOK_SECRET: "test-webhook-secret"
+        run: vendor/bin/phpstan analyse --configuration=phpstan.dist.neon --no-progress
+
+      - name: Check coding standards
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff --config=.php-cs-fixer.dist.php

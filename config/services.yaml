@@ -1,0 +1,52 @@
+parameters:
+    app.default_provider: '%env(string:DEFAULT_EMAIL_PROVIDER)%'
+    app.mailgun.api_key: '%env(string:MAILGUN_API_KEY)%'
+    app.mailgun.domain: '%env(string:MAILGUN_DOMAIN)%'
+    app.mailgun.base_url: '%env(string:MAILGUN_BASE_URL)%'
+    app.mailgun.fake_mode: '%env(bool:MAILGUN_FAKE_MODE)%'
+    app.mailgun.webhook_secret: '%env(string:MAILGUN_WEBHOOK_SECRET)%'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Enum/'
+            - '../src/Kernel.php'
+
+    App\Provider\LogEmailProvider:
+        arguments:
+            $logger: '@logger'
+
+    App\Provider\SmtpEmailProvider:
+        arguments:
+            $mailer: '@mailer'
+            $logger: '@logger'
+
+    App\Provider\MailgunEmailProvider:
+        arguments:
+            $httpClient: '@http_client'
+            $logger: '@logger'
+            $apiKey: '%app.mailgun.api_key%'
+            $domain: '%app.mailgun.domain%'
+            $baseUrl: '%app.mailgun.base_url%'
+            $fakeMode: '%app.mailgun.fake_mode%'
+
+    App\Provider\ProviderSelector:
+        arguments:
+            $providers:
+                - '@App\Provider\LogEmailProvider'
+                - '@App\Provider\SmtpEmailProvider'
+                - '@App\Provider\MailgunEmailProvider'
+            $defaultProvider: '%app.default_provider%'
+            $logger: '@logger'
+
+    App\Controller\WebhookController:
+        arguments:
+            $mailgunWebhookSecret: '%app.mailgun.webhook_secret%'
+        tags: ['controller.service_arguments']
